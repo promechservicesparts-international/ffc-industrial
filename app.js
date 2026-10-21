@@ -2,9 +2,9 @@ const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];con
 let L=localStorage.getItem('ffc_lang')||'es';const t=k=>(I18N[L]&&I18N[L][k])||I18N.en[k]||k;
 const EMPTY=()=>({units:[],drivers:[],tanks:[],fuel:[],delivery:[],maint:[],failures:[],requests:[],licences:[],expenses:[],
  setup:{departments:['Logistics','Mining','Workshop'],categories:['Light vehicle','Heavy vehicle','Yellow machine','Generator','Bowser'],vtypes:['LDV / Bakkie','Truck','Dump truck','Excavator','Loader','Dozer','Grader','Drill rig','Forklift','Bus'],mtypes:['Service A','Service B','Service C','Oil change','Tyres','Brakes','Inspection','Repair'],ftypes:['Engine','Hydraulics','Electrical','Tyres','Brakes','Transmission','Body','Other']}});
-let ALL=JSON.parse(localStorage.getItem(KEY)||'null');if(!ALL){const id='c1';ALL={companies:[{id,name:'My Company (Pty) Ltd',country:'South Africa',logo:''}],cur:id,d:{[id]:EMPTY()},users:[]}}
-let DB=ALL.d[ALL.cur];const save=()=>localStorage.setItem(KEY,JSON.stringify(ALL));
-let ME=JSON.parse(sessionStorage.getItem(KEY+'_me')||'null');let VIEW='dash',SUB='';
+const sb=supabase.createClient(CFG.sbUrl,CFG.sbKey);const KINDS=['units','drivers','tanks','fuel','delivery','maint','failures','requests','licences','expenses'];
+let ALL={companies:[],cur:null,d:{},users:[]},SNAP={},DB=EMPTY(),ME=null,PROFILES=[];
+let VIEW='dash',SUB='';
 async function sha(s){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const today=()=>new Date().toISOString().slice(0,10),nowdt=()=>new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,16);
@@ -24,27 +24,26 @@ delivery:{f:[['date','date',1],['source','sel',1,()=>DB.tanks.map(x=>({v:x.id,l:
 maint:{f:[['unit','sel',1,uOpts],['mtype','sel',1,list('mtypes')],['sched','date',1],['task','text',1],['duemeter','number'],['cost','number'],['done','sel',0,()=>[{v:'',l:t('pending')},{v:'1',l:t('done')}]],['notes','text']],cols:['unit','mtype','sched','task','done'],w:isSup},
 licences:{f:[['unit','sel',1,uOpts],['doc','sel',1,()=>['Registration','Licence disc','Roadworthy','Operating permit','Insurance','Mine permit'].map(p=>({v:p,l:p}))],['docno','text'],['expiry','date',1],['notes','text']],cols:['unit','doc','docno','expiry','st'],w:isSup},
 expenses:{f:[['date','date',1],['unit','sel',1,uOpts],['category','text',1],['amount','number',1],['receipt','text']],w:isSup},
-users:{f:[['user','text',1],['pass','text',1],['name','text'],['role','sel',1,()=>['superuser','supervisor','operator'].map(r=>({v:r,l:t(r)}))]],cols:['user','name','role'],w:isSU,store:()=>ALL.users}};
+users:{f:[['user','text',1],['pass','text',0],['name','text'],['role','sel',1,()=>['superuser','supervisor','operator'].map(r=>({v:r,l:t(r)}))]],cols:['user','name','role'],w:isSU,store:()=>PROFILES}};
 const NAV=[['dash','🏠','dash'],['failure','⚠️','failure'],['fuel','⛽','fuel'],['logistics','🚚','logistics'],['maintp','🔧','maintp'],['newveh','🚙','newveh'],['reporting','📊','reporting'],['licensing','📄','licensing'],['setup','⚙️','setup'],['share','🔗','share']];
 const LANGS={es:'ES',en:'EN',pt:'PT',fr:'FR',sw:'SW'};
-function langBar(){return`<div class=langs>${Object.entries(LANGS).map(([k,v])=>`<button class="lg ${k===L?'on':''}" data-l=${k}>${v}</button>`).join('')}</div>`}
+function langBar(){return`<div class=langs>${Object.entries(LANGS).map(([k,v])=>`<button type=button class="lg ${k===L?'on':''}" data-l=${k}>${v}</button>`).join('')}</div>`}
 function bindLang(){$$('[data-l]').forEach(b=>b.onclick=()=>{L=b.dataset.l;localStorage.setItem('ffc_lang',L);render()})}
 function logos(){const c=comp();return`<img src="icon-192.png" class=logo><div class=ttl>Fleet and Fuel Control<small>${CFG.edition}</small></div><div class=sp></div>${c&&c.logo?`<img src="${c.logo}" class=clogo>`:`<div class=clogo-t>${c?c.name:''}</div>`}`}
-function render(){document.documentElement.lang=L;if(!ME)return loginView();DB=ALL.d[ALL.cur];
+function render(){document.documentElement.lang=L;if(!ME)return loginView();if(ME.must)return pwView(1);DB=ALL.d[ALL.cur]||EMPTY();
 $('#root').innerHTML=`<header><div class=hrow>${logos()}</div><div class=hrow2>${langBar()}</div></header>
-<div class=cbar><b>${t('company').toUpperCase()}</b><select id=csel>${ALL.companies.map(c=>`<option value=${c.id} ${c.id===ALL.cur?'selected':''}>${c.name}</option>`).join('')}</select><span class=who>${ME.name||ME.user}<small>${t(role())}</small></span><button id=out class=ghost>${t('logout')}</button></div>
+<div class=cbar><b>${t('company').toUpperCase()}</b><select id=csel>${ALL.companies.map(c=>`<option value=${c.id} ${c.id===ALL.cur?'selected':''}>${c.name}</option>`).join('')}</select><span class=who>${ME.name||ME.user}<small>${t(role())}</small></span><button id=chpw class=ghost title="${t('chpw')}">🔑</button><button id=out class=ghost>${t('logout')}</button><span id=sync class=sync title=sync>●</span></div>
 <main id=main></main><nav class=bnav>${NAV.map(n=>`<a data-v=${n[0]} class="${VIEW===n[0]?'on':''}"><i>${n[1]}</i><span>${t(n[2])}</span></a>`).join('')}</nav><dialog id=dlg></dialog>`;
-bindLang();$('#out').onclick=()=>{ME=null;sessionStorage.removeItem(KEY+'_me');render()};
-$('#csel').onchange=e=>{ALL.cur=e.target.value;save();render()};
+bindLang();$('#out').onclick=async()=>{await sb.auth.signOut();ME=null;render()};$('#chpw').onclick=()=>pwView(0);
+$('#csel').onchange=e=>{ALL.cur=e.target.value;localStorage.setItem(KEY+'_cur',ALL.cur);render()};
 $$('.bnav a').forEach(a=>a.onclick=()=>{VIEW=a.dataset.v;SUB='';render();scrollTo(0,0)});
 ({dash,failure,fuel:fuelV,logistics,maintp,newveh,reporting,licensing,setup,share:shareV})[VIEW]()}
 function head(title,desc){const c=comp();return`<div class=phead><p class=kick>${(c?c.name:'')} · ${c?c.country||'':''}</p><h1>${title}</h1>${desc?`<p class=mut>${desc}</p>`:''}</div>`}
 function tabs(arr){if(!SUB)SUB=arr[0];return`<div class=tabs>${arr.map(a=>`<button class="tab ${SUB===a?'on':''}" data-s=${a}>${t(a)}</button>`).join('')}</div>`}
 function bindTabs(){$$('[data-s]').forEach(b=>b.onclick=()=>{SUB=b.dataset.s;render()})}
 function loginView(){$('#root').innerHTML=`<div class=login><div class=hero></div><form id=lf class=card><img src="icon-192.png" class=biglogo><h1>Fleet and Fuel Control</h1><p class=ed>${CFG.edition}</p>${langBar()}<label>${t('user')}<input name=u autocomplete=username required></label><label>${t('pass')}<input name=p type=password autocomplete=current-password required></label><button>${t('enter')}</button><p id=err class=err></p><button type=button id=inst class=ghost hidden>📲 ${t('install')}</button></form></div>`;
-bindLang();setupInstall();$('#lf').onsubmit=async e=>{e.preventDefault();const u=e.target.u.value.trim().toLowerCase(),h=await sha(e.target.p.value);
-const all=[...CFG.users,...ALL.users.map(x=>({u:x.user.toLowerCase(),h:x.h,role:x.role,name:x.name}))];const m=all.find(x=>x.u===u&&x.h===h);
-if(!m){$('#err').textContent=t('bad');return}ME={user:u,role:m.role,name:m.name};sessionStorage.setItem(KEY+'_me',JSON.stringify(ME));VIEW='dash';render()}}
+bindLang();setupInstall();$('#lf').onsubmit=async e=>{e.preventDefault();const u=e.target.u.value.trim().toLowerCase();$('#err').textContent='…';
+const {error}=await sb.auth.signInWithPassword({email:u+'@users.fleetfuel.app',password:e.target.p.value});if(error){$('#err').textContent=t('bad');return}VIEW='dash';await boot()}}
 /* calculations */
 function cons(){const out={},byU={};[...DB.fuel].filter(f=>/Diesel|Petrol/.test(f.product)).sort((a,b)=>num(a.reading)-num(b.reading)).forEach(f=>{const p=byU[f.unit],u=U(f.unit);if(p&&u){const d=num(f.reading)-num(p.reading);if(d>0)out[f.id]=u.meter==='hr'?num(f.liters)/d:d/num(f.liters)}byU[f.unit]=f});return out}
 function unitStats(from,to){const c=cons(),inR=d=>(!from||d>=from)&&(!to||d.slice(0,10)<=to);return DB.units.map(u=>{const fs=DB.fuel.filter(f=>f.unit===u.id&&inR(f.datetime||''));const Lt=fs.reduce((s,f)=>s+num(f.liters),0);
@@ -65,13 +64,14 @@ if(k==='role'||k==='status')return v?`<span class="pill ${v}">${t(v)}</span>`:''
 function table(rows,cols,act,sel){if(!rows.length)return`<p class=mut>${t('empty')}</p>`;return`<div class=tw><table><tr>${sel?'<th><input type=checkbox id=selall></th>':''}${cols.map(c=>`<th>${t(c)}</th>`).join('')}${act?'<th></th>':''}</tr>${rows.map(r=>`<tr>${sel?`<td><input type=checkbox class=rs value=${r.id}></td>`:''}${cols.map(c=>`<td>${cell(c,r[c],r)}</td>`).join('')}${act?`<td class=act>${act(r)}</td>`:''}</tr>`).join('')}</table></div>`}
 const store=v=>S[v].store?S[v].store():DB[v];
 function crud(v,rowsMap,opt={}){const s=S[v],can=s.w();const rows=(rowsMap?rowsMap([...store(v)]):[...store(v)]).reverse();const cols=s.cols||s.f.map(x=>x[0]).slice(0,6);
-return`<div class=card><div class=row><h3>${opt.title||t(v)}</h3><div class=sp></div>${can?`<button data-add=${v}>＋ ${opt.addl||t('add')}</button>`:''}</div>${table(rows,cols,can?r=>`<button class=ghost data-e="${v}|${r.id}">✏️</button>${isSup()?`<button class=ghost data-d="${v}|${r.id}">🗑️</button>`:''}`:null,opt.sel)}</div>`}
+return`<div class=card><div class=row><h3>${opt.title||t(v)}</h3><div class=sp></div>${can?`<button data-add=${v}>＋ ${opt.addl||t('add')}</button>`:''}</div>${table(rows,cols,can?r=>`<button class=ghost data-e="${v}|${r.id}">✏️</button>${isSup()&&v!=='users'?`<button class=ghost data-d="${v}|${r.id}">🗑️</button>`:''}`:null,opt.sel)}</div>`}
 function bindCrud(){$$('[data-add]').forEach(b=>b.onclick=()=>form(b.dataset.add));$$('[data-e]').forEach(b=>b.onclick=()=>{const[v,id]=b.dataset.e.split('|');form(v,store(v).find(x=>x.id===id))});
-$$('[data-d]').forEach(b=>b.onclick=()=>{const[v,id]=b.dataset.d.split('|');if(confirm(t('confirm'))){const a=store(v);a.splice(a.findIndex(x=>x.id===id),1);save();render()}})}
+$$('[data-d]').forEach(b=>b.onclick=()=>{const[v,id]=b.dataset.d.split('|');if(v==='users')return;if(confirm(t('confirm'))){const a=store(v);a.splice(a.findIndex(x=>x.id===id),1);save();render()}})}
 function fieldHTML([k,ty,req,o],rec){return`<label>${t(k)}${ty==='sel'?`<select name=${k} ${req?'required':''}>${req?`<option value="">${t('select')}…</option>`:''}${o().map(x=>`<option value="${x.v}" ${String(rec[k]??'')===String(x.v)?'selected':''}>${x.l}</option>`).join('')}</select>`:`<input name=${k} type=${ty} step=any ${req?'required':''} value="${k==='pass'?'':(rec[k]??(ty==='date'?today():ty==='datetime-local'?nowdt():''))}">`}</label>`}
 function form(v,rec){const s=S[v],d=$('#dlg');rec=rec||{};d.innerHTML=`<form class=frm><h3>${t(v)}</h3>${s.f.map(f=>fieldHTML(f,rec)).join('')}<p class=err id=ferr></p><div class=row><button type=button class=ghost id=fc>${t('cancel')}</button><div class=sp></div><button>${t('save')}</button></div></form>`;
 d.showModal();$('#fc').onclick=()=>d.close();d.querySelector('form').onsubmit=async e=>{e.preventDefault();const fd=Object.fromEntries(new FormData(e.target));
-if(v==='users'){fd.h=await sha(fd.pass);delete fd.pass;fd.user=fd.user.toLowerCase()}
+if(v==='users'){let r;if(rec.id){r=await sb.rpc('admin_update_user',{p_user:rec.id,p_name:fd.name,p_role:fd.role,p_active:true});if(!r.error&&fd.pass)r=await sb.rpc('admin_set_password',{p_user:rec.id,p_password:fd.pass})}else r=await sb.rpc('admin_create_user',{p_username:fd.user.toLowerCase(),p_password:fd.pass,p_name:fd.name,p_role:fd.role});
+if(r.error){$('#ferr').textContent=r.error.message;return}d.close();await loadProfiles();render();return}
 if(v==='fuel'&&!rec.id){const u=U(fd.unit);if(u&&num(fd.reading)<num(u.reading)){$('#ferr').textContent=t('odolow')+' ('+u.reading+')';return}if(u)u.reading=fd.reading;const k=DB.tanks.find(x=>x.id===fd.source);if(k)k.stock=num(k.stock)-num(fd.liters)}
 if(v==='delivery'&&!rec.id){const k=DB.tanks.find(x=>x.id===fd.source);if(k)k.stock=num(k.stock)+num(fd.liters)}
 if(rec.id)Object.assign(rec,fd);else store(v).push({id:uid(),by:ME.user,...fd});save();d.close();render()}}
@@ -139,17 +139,17 @@ $$('[data-md]').forEach(b=>b.onclick=()=>{const l=DB.licences.find(x=>x.id===b.d
 function setup(){const secs=['departments','categories','vtypes','mtypes','ftypes'];
 $('#main').innerHTML=head(t('setup'),t('setupd'))+secs.map(k=>`<details class=card><summary><b>${t(k)}</b><span class=badge>${DB.setup[k].length}</span></summary>${DB.setup[k].map((x,i)=>`<div class=srow><span>${x}</span><div class=sp></div>${isSup()?`<a data-se="${k}|${i}">${t('edit')}</a> <a data-sd="${k}|${i}">${t('del')}</a>`:''}</div>`).join('')}${isSup()?`<div class=row><input id=n_${k} placeholder="${t(k)}"><button data-sa=${k}>${t('add')}</button></div>`:''}</details>`).join('')+
 `<details class=card><summary><b>${t('companies')}</b><span class=badge>${ALL.companies.length}</span></summary>${ALL.companies.map(c=>`<div class=srow>${c.logo?`<img src="${c.logo}" class=minilogo>`:''}<span>${c.name} · ${c.country||''}</span><div class=sp></div>${isSU()?`<a data-ce=${c.id}>${t('edit')}</a>`:''}</div>`).join('')}${isSU()?`<div class=row><input id=ncn placeholder="${t('company')}"><input id=ncc placeholder="Country" style="max-width:160px"><button id=nca>${t('add')}</button></div><label>${t('clientlogo')} (${comp().name})<input type=file accept=image/* id=clog></label>`:''}</details>`+
-(isSU()?`<details class=card><summary><b>${t('usersT')}</b><span class=badge>${CFG.users.length+ALL.users.length}</span></summary><p class=mut>${CFG.users.map(u=>u.u+' ('+t(u.role)+')').join(', ')}</p>${crud('users',null,{title:t('usersT')})}</details>`:'')+
-`<details class=card><summary><b>💾 ${t('data')}</b></summary><div class=btns><button id=bj>💾 ${t('exportJSON')}</button>${isSU()?`<label class=filebtn>📂 ${t('importJSON')}<input type=file id=ij accept=.json hidden></label><button id=rs class=danger>🗑️ ${t('reset')}</button>`:''}</div></details>`;
+(isSU()?`<details class=card><summary><b>${t('usersT')}</b><span class=badge>${PROFILES.length}</span></summary>${crud('users',null,{title:t('usersT')})}</details>`:'')+
+`<details class=card><summary><b>💾 ${t('data')}</b></summary><div class=btns><button id=bj>💾 ${t('exportJSON')}</button>${isSU()?`<label class=filebtn>📂 ${t('importJSON')}<input type=file id=ij accept=.json hidden></label><button id=imploc>☁️ ${t('imploc')}</button>`:''}</div></details>`;
 bindCrud();$$('[data-sa]').forEach(b=>b.onclick=()=>{const k=b.dataset.sa,v=$('#n_'+k).value.trim();if(v){DB.setup[k].push(v);save();render()}});
 $$('[data-se]').forEach(a=>a.onclick=()=>{const[k,i]=a.dataset.se.split('|');const v=prompt(t('edit'),DB.setup[k][i]);if(v){DB.setup[k][i]=v;save();render()}});
 $$('[data-sd]').forEach(a=>a.onclick=()=>{const[k,i]=a.dataset.sd.split('|');if(confirm(t('confirm'))){DB.setup[k].splice(i,1);save();render()}});
-$$('[data-ce]').forEach(a=>a.onclick=()=>{const c=ALL.companies.find(x=>x.id===a.dataset.ce);const n=prompt(t('company'),c.name);if(n){c.name=n;c.country=prompt('Country',c.country)||c.country;save();render()}});
-if($('#nca'))$('#nca').onclick=()=>{const n=$('#ncn').value.trim();if(!n)return;const id=uid();ALL.companies.push({id,name:n,country:$('#ncc').value,logo:''});ALL.d[id]=EMPTY();ALL.cur=id;save();render()};
-if($('#clog'))$('#clog').onchange=e=>{const r=new FileReader();r.onload=()=>{const img=new Image();img.onload=()=>{const c=document.createElement('canvas'),s=Math.min(1,320/img.width);c.width=img.width*s;c.height=img.height*s;c.getContext('2d').drawImage(img,0,0,c.width,c.height);comp().logo=c.toDataURL('image/png');save();render()};img.src=r.result};r.readAsDataURL(e.target.files[0])};
-$('#bj').onclick=()=>dl('fleet-backup-'+today()+'.json',JSON.stringify(ALL),'application/json');
-if($('#ij'))$('#ij').onchange=e=>{const r=new FileReader();r.onload=()=>{try{ALL=JSON.parse(r.result);save();render()}catch(x){alert(x)}};r.readAsText(e.target.files[0])};if($('#rs'))$('#rs').onclick=()=>{if(confirm(t('confirm'))){localStorage.removeItem(KEY);location.reload()}}}
+$$('[data-ce]').forEach(a=>a.onclick=()=>{const c=ALL.companies.find(x=>x.id===a.dataset.ce);const n=prompt(t('company'),c.name);if(n){c.name=n;c.country=prompt('Country',c.country)||c.country;saveCompany(c)}});
+if($('#nca'))$('#nca').onclick=async()=>{const n=$('#ncn').value.trim();if(!n)return;const{data,error}=await sb.from('companies').insert({name:n,country:$('#ncc').value}).select().single();if(error)return alert(error.message);ALL.companies.push(data);ALL.d[data.id]=EMPTY();ALL.cur=data.id;render()};
+if($('#clog'))$('#clog').onchange=e=>{const r=new FileReader();r.onload=()=>{const img=new Image();img.onload=()=>{const c=document.createElement('canvas'),s=Math.min(1,320/img.width);c.width=img.width*s;c.height=img.height*s;c.getContext('2d').drawImage(img,0,0,c.width,c.height);comp().logo=c.toDataURL('image/png');saveCompany(comp())};img.src=r.result};r.readAsDataURL(e.target.files[0])};
+$('#bj').onclick=()=>dl('fleet-backup-'+today()+'.json',JSON.stringify(DB),'application/json');
+if($('#ij'))$('#ij').onchange=e=>{const r=new FileReader();r.onload=()=>{try{importInto(JSON.parse(r.result))}catch(x){alert(x)}};r.readAsText(e.target.files[0])};if($('#imploc'))$('#imploc').onclick=importLocal}
 function shareV(){const url=CFG.url;$('#main').innerHTML=head(t('share'),t('shareTxt'))+`<div class="card center"><img src="qr.png" class=qr alt=QR><input id=lnk readonly value="${url}"><div class=row style="justify-content:center"><button id=cp>📋 ${t('copy')}</button>${navigator.share?`<button id=sh class=ghost>📤 ${t('share')}</button>`:''}<a class="btn ghost" href="https://wa.me/?text=${encodeURIComponent('Fleet and Fuel Control '+url)}" target=_blank>WhatsApp</a><button id=inst class=ghost hidden>📲 ${t('install')}</button></div></div>`;
 $('#cp').onclick=()=>{navigator.clipboard.writeText(url);$('#cp').textContent='✅ '+t('copied')};if($('#sh'))$('#sh').onclick=()=>navigator.share({title:'Fleet and Fuel Control',url});setupInstall()}
 let DP;addEventListener('beforeinstallprompt',e=>{e.preventDefault();DP=e;setupInstall()});function setupInstall(){const b=$('#inst');if(b&&DP){b.hidden=false;b.onclick=()=>DP.prompt()}}
-if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');render();
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
