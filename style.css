@@ -27,3 +27,4 @@ details summary{cursor:pointer;display:flex;justify-content:space-between;font-s
 .center{text-align:center}.qr{width:240px;background:#fff;padding:10px;border-radius:12px}#lnk{max-width:460px;text-align:center}
 @media(min-width:900px){.k4{grid-template-columns:repeat(4,1fr)}}@media print{header,nav,.cbar,button{display:none}}
 .sync{font-size:1.1rem;color:#999}.sync.ok{color:#3fa34d}.sync.busy{color:#e6a100}.sync.err{color:#e05545}
+.brand{display:block;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;opacity:.9;font-weight:800}.brandbig{text-align:center;margin:10px 0 0;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:#7a9a2e;font-size:1.15rem}
