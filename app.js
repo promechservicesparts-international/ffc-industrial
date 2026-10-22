@@ -29,7 +29,7 @@ const NAV=[['dash','🏠','dash'],['failure','⚠️','failure'],['fuel','⛽','
 const LANGS={es:'ES',en:'EN',pt:'PT',fr:'FR',sw:'SW'};
 function langBar(){return`<div class=langs>${Object.entries(LANGS).map(([k,v])=>`<button type=button class="lg ${k===L?'on':''}" data-l=${k}>${v}</button>`).join('')}</div>`}
 function bindLang(){$$('[data-l]').forEach(b=>b.onclick=()=>{L=b.dataset.l;localStorage.setItem('ffc_lang',L);render()})}
-function logos(){const c=comp();return`<img src="icon-192.png" class=logo><div class=ttl>Fleet and Fuel Control<small>${CFG.edition}</small></div><div class=sp></div>${c&&c.logo?`<img src="${c.logo}" class=clogo>`:`<div class=clogo-t>${c?c.name:''}</div>`}`}
+function logos(){const c=comp();return`<img src="icon-192.png" class=logo><div class=ttl>Fleet and Fuel Control</div><div class=sp></div>${c&&c.logo?`<img src="${c.logo}" class=clogo>`:`<div class=clogo-t>${c?c.name:''}</div>`}`}
 function render(){document.documentElement.lang=L;if(!ME)return loginView();if(ME.must)return pwView(1);DB=ALL.d[ALL.cur]||EMPTY();
 $('#root').innerHTML=`<header><div class=hrow>${logos()}</div><div class=hrow2>${langBar()}</div></header>
 <div class=cbar><b>${t('company').toUpperCase()}</b><select id=csel>${ALL.companies.map(c=>`<option value=${c.id} ${c.id===ALL.cur?'selected':''}>${c.name}</option>`).join('')}</select><span class=who>${ME.name||ME.user}<small>${t(role())}</small></span><button id=chpw class=ghost title="${t('chpw')}">🔑</button><button id=out class=ghost>${t('logout')}</button><span id=sync class=sync title=sync>●</span></div>
@@ -41,7 +41,7 @@ $$('.bnav a').forEach(a=>a.onclick=()=>{VIEW=a.dataset.v;SUB='';render();scrollT
 function head(title,desc){const c=comp();return`<div class=phead><p class=kick>${(c?c.name:'')} · ${c?c.country||'':''}</p><h1>${title}</h1>${desc?`<p class=mut>${desc}</p>`:''}</div>`}
 function tabs(arr){if(!SUB)SUB=arr[0];return`<div class=tabs>${arr.map(a=>`<button class="tab ${SUB===a?'on':''}" data-s=${a}>${t(a)}</button>`).join('')}</div>`}
 function bindTabs(){$$('[data-s]').forEach(b=>b.onclick=()=>{SUB=b.dataset.s;render()})}
-function loginView(){$('#root').innerHTML=`<div class=login><div class=hero></div><form id=lf class=card><img src="icon-192.png" class=biglogo><h1>Fleet and Fuel Control</h1><p class=ed>${CFG.edition}</p>${langBar()}<label>${t('user')}<input name=u autocomplete=username required></label><label>${t('pass')}<input name=p type=password autocomplete=current-password required></label><button>${t('enter')}</button><p id=err class=err></p><button type=button id=inst class=ghost hidden>📲 ${t('install')}</button></form></div>`;
+function loginView(){$('#root').innerHTML=`<div class=login><div class=hero></div><form id=lf class=card><img src="icon-192.png" class=biglogo><h1>Fleet and Fuel Control</h1>${langBar()}<label>${t('user')}<input name=u autocomplete=username required></label><label>${t('pass')}<input name=p type=password autocomplete=current-password required></label><button>${t('enter')}</button><p id=err class=err></p><button type=button id=inst class=ghost hidden>📲 ${t('install')}</button></form></div>`;
 bindLang();setupInstall();$('#lf').onsubmit=async e=>{e.preventDefault();const u=e.target.u.value.trim().toLowerCase();$('#err').textContent='…';
 const {error}=await sb.auth.signInWithPassword({email:u+'@users.fleetfuel.app',password:e.target.p.value});if(error){$('#err').textContent=t('bad');return}VIEW='dash';await boot()}}
 /* calculations */
